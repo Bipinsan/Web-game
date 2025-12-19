@@ -1,48 +1,68 @@
 import pygame
 import sys
-import asyncio  # Required for web compatibility
+import asyncio
+import random
 
 pygame.init()
 
-# --- WINDOW CONFIGURATION ---
-WIDTH, HEIGHT = 360, 420
-# For web platforms like Trinket, SCALED is usually handled by the browser container
-WIN = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Tic Tac Toe - Pro")
+# --- DYNAMIC CONFIGURATION ---
+# Get user screen info
+info = pygame.display.Info()
+SCREEN_W, SCREEN_H = info.current_w, info.current_h
 
-# Colors
-BG = (245, 245, 245)
-LINE = (50, 50, 50)
-X_COLOR = (66, 133, 244)
-O_COLOR = (219, 68, 55)
-BTN_COLOR = (66, 133, 244)
-BTN_HOVER = (50, 100, 200)
-BACK_BTN_COLOR = (150, 150, 150)
+# The "Internal" resolution we design for
+VIRTUAL_W, VIRTUAL_H = 360, 480
+
+# Calculate scaling to fit screen while maintaining aspect ratio
+scale_factor = min(SCREEN_W / VIRTUAL_W, SCREEN_H / VIRTUAL_H)
+# Apply a slight reduction (0.9) if you don't want it to touch edges, 
+# but for true full screen we use full scale.
+WIDTH, HEIGHT = int(VIRTUAL_W * scale_factor), int(VIRTUAL_H * scale_factor)
+
+# Calculate Offsets to center the virtual screen on the physical screen
+OFFSET_X = (SCREEN_W - WIDTH) // 2
+OFFSET_Y = (SCREEN_H - HEIGHT) // 2
+
+# Set to Fullscreen
+WIN = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+# Internal surface for clean drawing before scaling
+CANVAS = pygame.Surface((VIRTUAL_W, VIRTUAL_H))
+
+pygame.display.set_caption("Tic Tac Toe - Pro Fullscreen")
+
+# --- PALETTE & FONTS ---
+BG = (240, 242, 245)
+LINE = (180, 185, 195)
+X_COLOR = (41, 121, 255)
+O_COLOR = (255, 82, 82)
+BTN_COLOR = (33, 33, 33)
+BTN_HOVER = (60, 60, 60)
 WHITE = (255, 255, 255)
-GRAY = (200, 200, 200)
+TEXT_COLOR = (44, 62, 80)
 
-# Fonts
-# Note: Trinket sometimes struggles with None fonts; 'monospace' is safer for web
-FONT = pygame.font.SysFont('monospace', 80, bold=True)
-SMALL = pygame.font.SysFont('monospace', 25, bold=True)
-TINY = pygame.font.SysFont('monospace', 18, bold=True)
-BIG = pygame.font.SysFont('monospace', 35, bold=True)
+try:
+    FONT = pygame.font.SysFont('sans-serif', 80, bold=True)
+    SMALL = pygame.font.SysFont('sans-serif', 20, bold=True)
+    BIG = pygame.font.SysFont('sans-serif', 40, bold=True)
+except:
+    FONT = pygame.font.SysFont('monospace', 80, bold=True)
+    SMALL = pygame.font.SysFont('monospace', 20, bold=True)
+    BIG = pygame.font.SysFont('monospace', 40, bold=True)
 
-# Game State
+# --- GAME STATE ---
 board = [0] * 10
 player = 1
 game_over = False
 winner = 0
 scene = "HOME"
 mode = "AI"
+difficulty = "MEDIUM"
 
-wins = [(1,2,3),(4,5,6),(7,8,9),(1,4,7),(2,5,8),(3,6,9),(1,5,9),(3,5,7)]
+WINS = [(1,2,3),(4,5,6),(7,8,9),(1,4,7),(2,5,8),(3,6,9),(1,5,9),(3,5,7)]
 
-# --- LOGIC FUNCTIONS ---
+# --- LOGIC ---
 def check_win(b, p):
-    for a, b_idx, c in wins:
-        if b[a] == b[b_idx] == b[c] == p: return True
-    return False
+    return any(all(b[idx] == p for idx in combo) for combo in WINS)
 
 def check_draw(b):
     return all(b[i] != 0 for i in range(1, 10))
@@ -54,6 +74,7 @@ def minimax(current_board, depth, is_maximizing):
     if check_win(current_board, 2): return 10 - depth
     if check_win(current_board, 1): return depth - 10
     if check_draw(current_board): return 0
+    
     if is_maximizing:
         best_score = -float('inf')
         for cell in get_empty_cells(current_board):
@@ -72,23 +93,37 @@ def minimax(current_board, depth, is_maximizing):
         return best_score
 
 def computer_move():
-    best_score = -float('inf')
-    move = None
-    for cell in get_empty_cells(board):
-        board[cell] = 2
-        score = minimax(board, 0, False)
-        board[cell] = 0
-        if score > best_score:
-            best_score = score
-            move = cell
-    if move: board[move] = 2
+    empty = get_empty_cells(board)
+    if not empty: return
+    mistake_chance = 0.50 if difficulty == "EASY" else 0.15 if difficulty == "MEDIUM" else 0.0
+    if random.random() < mistake_chance:
+        move = random.choice(empty)
+    else:
+        best_score = -float('inf')
+        move = empty[0]
+        for cell in empty:
+            board[cell] = 2
+            score = minimax(board, 0, False)
+            board[cell] = 0
+            if score > best_score:
+                best_score = score
+                move = cell
+    board[move] = 2
 
-def get_cell(pos):
-    x, y = pos
-    if y < 40 or y > 360: return None
-    col, row = x // 120, (y - 40) // 120
-    cell = row * 3 + col + 1
-    return cell if 1 <= cell <= 9 else None
+def get_virtual_mouse():
+    """Translates real screen mouse pos to virtual 360x480 pos"""
+    mx, my = pygame.mouse.get_pos()
+    vx = (mx - OFFSET_X) / scale_factor
+    vy = (my - OFFSET_Y) / scale_factor
+    return vx, vy
+
+def get_cell(v_pos):
+    vx, vy = v_pos
+    if vy < 80 or vy > 440: return None
+    col, row = int(vx // 120), int((vy - 80) // 120)
+    if 0 <= col <= 2 and 0 <= row <= 2:
+        return row * 3 + col + 1
+    return None
 
 def reset_game():
     global board, player, game_over, winner
@@ -97,86 +132,93 @@ def reset_game():
     game_over = False
     winner = 0
 
-# --- DRAWING FUNCTIONS ---
+# --- DRAWING ---
+def draw_button(text, x, y, w, h, active, color=BTN_COLOR):
+    c = BTN_HOVER if active else color
+    pygame.draw.rect(CANVAS, c, (x, y, w, h), border_radius=12)
+    txt = SMALL.render(text, True, WHITE)
+    CANVAS.blit(txt, (x + (w - txt.get_width()) // 2, y + (h - txt.get_height()) // 2))
+
 def draw_marks():
     for i in range(1, 10):
         r, c = (i - 1) // 3, (i - 1) % 3
-        x, y = c * 120 + 40, r * 120 + 60
-        if board[i] == 1: WIN.blit(FONT.render("X", True, X_COLOR), (x, y))
-        elif board[i] == 2: WIN.blit(FONT.render("O", True, O_COLOR), (x, y))
+        cx, cy = c * 120 + 60, r * 120 + 140
+        if board[i] == 1:
+            pygame.draw.line(CANVAS, X_COLOR, (cx-30, cy-30), (cx+30, cy+30), 12)
+            pygame.draw.line(CANVAS, X_COLOR, (cx+30, cy-30), (cx-30, cy+30), 12)
+        elif board[i] == 2:
+            pygame.draw.circle(CANVAS, O_COLOR, (cx, cy), 35, 10)
 
-def draw_button(text, x, y, w, h, active, color_override=None):
-    color = BTN_HOVER if active else (color_override if color_override else BTN_COLOR)
-    pygame.draw.rect(WIN, color, (x, y, w, h), border_radius=12)
-    txt = SMALL.render(text, True, WHITE)
-    WIN.blit(txt, (x + (w - txt.get_width()) // 2, y + (h - txt.get_height()) // 2))
+def draw_home(v_mouse):
+    CANVAS.fill(BG)
+    title = BIG.render("TIC TAC TOE", True, TEXT_COLOR)
+    CANVAS.blit(title, (VIRTUAL_W // 2 - title.get_width() // 2, 120))
+    mx, my = v_mouse
+    draw_button("VS COMPUTER", 60, 220, 240, 50, 60 <= mx <= 300 and 220 <= my <= 270)
+    draw_button("VS HUMAN", 60, 290, 240, 50, 60 <= mx <= 300 and 290 <= my <= 340)
 
-def draw_home():
-    WIN.fill(BG)
-    title = BIG.render("TIC TAC TOE", True, LINE)
-    WIN.blit(title, (WIDTH // 2 - title.get_width() // 2, 80))
-    m_pos = pygame.mouse.get_pos()
-    ai_active = 60 <= m_pos[0] <= 300 and 180 <= m_pos[1] <= 230
-    draw_button("VS COMPUTER", 60, 180, 240, 50, ai_active)
-    pvp_active = 60 <= m_pos[0] <= 300 and 250 <= m_pos[1] <= 300
-    draw_button("VS HUMAN", 60, 250, 240, 50, pvp_active)
+def draw_difficulty_screen(v_mouse):
+    CANVAS.fill(BG)
+    title = BIG.render("SELECT LEVEL", True, TEXT_COLOR)
+    CANVAS.blit(title, (VIRTUAL_W // 2 - title.get_width() // 2, 100))
+    mx, my = v_mouse
+    levels = [("EASY", 180), ("MEDIUM", 250), ("IMPOSSIBLE", 320)]
+    for name, y in levels:
+        draw_button(name, 80, y, 200, 50, 80 <= mx <= 280 and y <= my <= y + 50)
 
-def draw_game_ui():
-    WIN.fill(BG)
-    pygame.draw.line(WIN, LINE, (120, 40), (120, 360), 5)
-    pygame.draw.line(WIN, LINE, (240, 40), (240, 360), 5)
-    pygame.draw.line(WIN, LINE, (0, 160), (360, 160), 5)
-    pygame.draw.line(WIN, LINE, (0, 280), (360, 280), 5)
-    m_pos = pygame.mouse.get_pos()
-    back_active = 10 <= m_pos[0] <= 80 and 10 <= m_pos[1] <= 35
-    pygame.draw.rect(WIN, BACK_BTN_COLOR if not back_active else BTN_HOVER, (10, 10, 70, 25), border_radius=5)
-    back_txt = TINY.render("BACK", True, WHITE)
-    WIN.blit(back_txt, (10 + (70 - back_txt.get_width()) // 2, 10 + (25 - back_txt.get_height()) // 2))
-    status_text = "PVP Mode" if mode == "PVP" else "Vs Computer"
-    status = SMALL.render(status_text, True, LINE)
-    WIN.blit(status, (WIDTH - status.get_width() - 10, 10))
+def draw_game_ui(v_mouse):
+    CANVAS.fill(BG)
+    for i in range(1, 3):
+        pygame.draw.line(CANVAS, LINE, (120 * i, 90), (120 * i, 430), 4)
+        pygame.draw.line(CANVAS, LINE, (10, 80 + 120 * i), (350, 80 + 120 * i), 4)
+    mx, my = v_mouse
+    draw_button("BACK", 15, 20, 70, 30, 15 <= mx <= 85 and 20 <= my <= 50, (120, 120, 120))
+    info = f"{mode} | {difficulty if mode == 'AI' else ''}"
+    status = SMALL.render(info, True, (100, 100, 100))
+    CANVAS.blit(status, (VIRTUAL_W - status.get_width() - 15, 25))
 
-def draw_end_screen(text):
-    overlay = pygame.Surface((WIDTH, HEIGHT))
-    overlay.set_alpha(200); overlay.fill((0, 0, 0))
-    WIN.blit(overlay, (0, 0))
-    msg = BIG.render(text, True, WHITE)
-    WIN.blit(msg, (WIDTH//2 - msg.get_width()//2, 140))
-    m_pos = pygame.mouse.get_pos()
-    btn_active = 110 <= m_pos[0] <= 250 and 220 <= m_pos[1] <= 270
-    draw_button("RESTART", 110, 220, 140, 50, btn_active)
+def draw_end_screen(text, v_mouse):
+    overlay = pygame.Surface((VIRTUAL_W, VIRTUAL_H), pygame.SRCALPHA)
+    overlay.fill((255, 255, 255, 210)) 
+    CANVAS.blit(overlay, (0, 0))
+    msg = BIG.render(text, True, TEXT_COLOR)
+    CANVAS.blit(msg, (VIRTUAL_W//2 - msg.get_width()//2, 200))
+    mx, my = v_mouse
+    draw_button("RESTART", 110, 280, 140, 50, 110 <= mx <= 250 and 280 <= my <= 330)
 
-# --- ASYNC MAIN LOOP ---
+# --- MAIN LOOP ---
 async def main():
-    global scene, mode, player, winner, game_over
+    global scene, mode, player, winner, game_over, difficulty
     while True:
-        if scene == "HOME":
-            draw_home()
+        v_mouse = get_virtual_mouse()
+        
+        if scene == "HOME": draw_home(v_mouse)
+        elif scene == "DIFFICULTY": draw_difficulty_screen(v_mouse)
         else:
-            draw_game_ui()
-            draw_marks()
+            draw_game_ui(v_mouse); draw_marks()
             if game_over:
-                if winner == 1: draw_end_screen("X WINS!")
-                elif winner == 2: draw_end_screen("O WINS!")
-                else: draw_end_screen("DRAW!")
+                draw_end_screen("X WINS!" if winner == 1 else "O WINS!" if winner == 2 else "DRAW!", v_mouse)
 
         for event in pygame.event.get():
-            if event.type == pygame.QUIT:
+            if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
                 pygame.quit(); sys.exit()
+            
             if event.type == pygame.MOUSEBUTTONDOWN:
+                mx, my = v_mouse
                 if scene == "HOME":
-                    if 60 <= event.pos[0] <= 300 and 180 <= event.pos[1] <= 230:
-                        mode = "AI"; reset_game(); scene = "GAME"
-                    if 60 <= event.pos[0] <= 300 and 250 <= event.pos[1] <= 300:
-                        mode = "PVP"; reset_game(); scene = "GAME"
+                    if 60 <= mx <= 300:
+                        if 220 <= my <= 270: scene = "DIFFICULTY"
+                        if 290 <= my <= 340: mode = "PVP"; reset_game(); scene = "GAME"
+                elif scene == "DIFFICULTY":
+                    if 80 <= mx <= 280:
+                        if 180 <= my <= 230: difficulty = "EASY"; mode = "AI"; reset_game(); scene = "GAME"
+                        if 250 <= my <= 300: difficulty = "MEDIUM"; mode = "AI"; reset_game(); scene = "GAME"
+                        if 320 <= my <= 370: difficulty = "IMPOSSIBLE"; mode = "AI"; reset_game(); scene = "GAME"
                 elif scene == "GAME":
-                    if 10 <= event.pos[0] <= 80 and 10 <= event.pos[1] <= 35:
-                        scene = "HOME"
-                    if game_over:
-                        if 110 <= event.pos[0] <= 250 and 220 <= event.pos[1] <= 270:
-                            reset_game()
+                    if 15 <= mx <= 85 and 20 <= my <= 50: scene = "HOME"
+                    elif game_over and 110 <= mx <= 250 and 280 <= my <= 330: reset_game()
                     elif player == 1 or (player == 2 and mode == "PVP"):
-                        cell = get_cell(event.pos)
+                        cell = get_cell(v_mouse)
                         if cell and board[cell] == 0:
                             board[cell] = player
                             if check_win(board, player): winner = player; game_over = True
@@ -184,14 +226,19 @@ async def main():
                             else: player = 3 - player
 
         if scene == "GAME" and mode == "AI" and player == 2 and not game_over:
-            computer_move()
+            await asyncio.sleep(0.5); computer_move()
             if check_win(board, 2): winner = 2; game_over = True
             elif check_draw(board): game_over = True
             else: player = 1
 
+        # Center and Scale logic
+        WIN.fill((0, 0, 0)) # Black bars for the background
+        # Rescale the virtual canvas to the calculated fullscreen size
+        scaled_win = pygame.transform.smoothscale(CANVAS, (WIDTH, HEIGHT))
+        WIN.blit(scaled_win, (OFFSET_X, OFFSET_Y))
+        
         pygame.display.update()
-        # This line is critical for Trinket/Web! It lets the browser breathe.
         await asyncio.sleep(0)
 
-# Start the game
 asyncio.run(main())
+
