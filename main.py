@@ -5,30 +5,26 @@ import random
 
 pygame.init()
 
-# --- DYNAMIC CONFIGURATION ---
-# Get user screen info
-info = pygame.display.Info()
-SCREEN_W, SCREEN_H = info.current_w, info.current_h
-
+# --- CONFIGURATION ---
 # The "Internal" resolution we design for
 VIRTUAL_W, VIRTUAL_H = 360, 480
 
-# Calculate scaling to fit screen while maintaining aspect ratio
-scale_factor = min(SCREEN_W / VIRTUAL_W, SCREEN_H / VIRTUAL_H)
-# Apply a slight reduction (0.9) if you don't want it to touch edges, 
-# but for true full screen we use full scale.
-WIDTH, HEIGHT = int(VIRTUAL_W * scale_factor), int(VIRTUAL_H * scale_factor)
+# Window Configuration (Non-Fullscreen)
+# You can change '1.2' to '1.0' for a smaller window or '1.5' for a larger one
+window_scale = 1.2 
+WIDTH, HEIGHT = int(VIRTUAL_W * window_scale), int(VIRTUAL_H * window_scale)
 
-# Calculate Offsets to center the virtual screen on the physical screen
-OFFSET_X = (SCREEN_W - WIDTH) // 2
-OFFSET_Y = (SCREEN_H - HEIGHT) // 2
+# Offsets are 0 because the window size now matches the game area
+OFFSET_X = 0
+OFFSET_Y = 0
+scale_factor = window_scale
 
-# Set to Fullscreen
-WIN = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
-# Internal surface for clean drawing before scaling
+# Set to Windowed mode (Removed pygame.FULLSCREEN)
+WIN = pygame.display.set_mode((WIDTH, HEIGHT))
+# Internal surface for clean drawing
 CANVAS = pygame.Surface((VIRTUAL_W, VIRTUAL_H))
 
-pygame.display.set_caption("Tic Tac Toe - Pro Fullscreen")
+pygame.display.set_caption("Tic Tac Toe - Pro")
 
 # --- PALETTE & FONTS ---
 BG = (240, 242, 245)
@@ -111,10 +107,9 @@ def computer_move():
     board[move] = 2
 
 def get_virtual_mouse():
-    """Translates real screen mouse pos to virtual 360x480 pos"""
     mx, my = pygame.mouse.get_pos()
-    vx = (mx - OFFSET_X) / scale_factor
-    vy = (my - OFFSET_Y) / scale_factor
+    vx = mx / scale_factor
+    vy = my / scale_factor
     return vx, vy
 
 def get_cell(v_pos):
@@ -200,7 +195,7 @@ async def main():
                 draw_end_screen("X WINS!" if winner == 1 else "O WINS!" if winner == 2 else "DRAW!", v_mouse)
 
         for event in pygame.event.get():
-            if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
+            if event.type == pygame.QUIT:
                 pygame.quit(); sys.exit()
             
             if event.type == pygame.MOUSEBUTTONDOWN:
@@ -231,11 +226,8 @@ async def main():
             elif check_draw(board): game_over = True
             else: player = 1
 
-        # Center and Scale logic
-        WIN.fill((0, 0, 0)) # Black bars for the background
-        # Rescale the virtual canvas to the calculated fullscreen size
-        scaled_win = pygame.transform.smoothscale(CANVAS, (WIDTH, HEIGHT))
-        WIN.blit(scaled_win, (OFFSET_X, OFFSET_Y))
+        # Smooth scaling for the window
+        WIN.blit(pygame.transform.smoothscale(CANVAS, (WIDTH, HEIGHT)), (0, 0))
         
         pygame.display.update()
         await asyncio.sleep(0)
